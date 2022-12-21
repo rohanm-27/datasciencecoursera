@@ -1,0 +1,103 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Rohan Maniyar"
+date: "December 21, 2022"
+---
+
+
+
+# Project Description
+
+> **Question**
+> 
+> Using devices such as *Jawbone Up*, *Nike FuelBand*, and *Fitbit* it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement -- a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+
+
+# My Write-Up
+
+The original training and testing data have 160 variables.  I removed columns with NA entries, which brought the number of variables down to 60.  I then removed 6 additional variables which contained information that I deemed not useful: X, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window, num_window.  (Prior to removing these variables, I was achieving perfect accuracy on my training and validation sets, but my model was predicting all of the test cases to be of classe A.)  Aside from user_name and classe/problem_id, all of the remaining variables appear to be measurements from the fitness device.  
+
+From here, I split the training data into two sets: "traindata2" for training the model (60%) and "validation" for validation of the model (40%).  For puposes of reproducibility, I set the seed to 111.  I trained a random forest on "traindata2" using the default parameters.  I chose a random forest model because they tend to be very accurate and the data set was small enough that using a random forest was feasible.
+
+I predicted the classes on "traindata2" and found that the accuracy was 100%.  I then used this model to predict the values on the "validation" set and found the accuracy to be 99.3%.  Since this was the first model that I tried (as opposed to trying multiple models and selecting the best performer on the validation set), I expect the out of sample error to be around 99%.  
+
+I applied this model to the testing data set and submitted my answers, and it correctly identified all 20 cases.  
+
+
+
+# My Code
+
+```{r, include=FALSE}
+setwd("C:\\Users\\rohan\\COursera\\Machine Learning\\Course_Project_GitHub\\practicalmachinelearning")
+rm(list=ls())
+```
+
+```{r, message=FALSE}
+# load necessary libraries
+library(caret)
+library(randomForest)
+```
+
+```{r}
+# Download and read in the data and identify the NA's
+training.url <- 'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv'
+test.cases.url <- 'http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv'
+downloadcsv <- function(url, nastrings) {
+  temp <- tempfile()
+  download.file(url, temp, method = "curl")
+  data <- read.csv(temp, na.strings = nastrings)
+  unlink(temp)
+  return(data)
+}
+
+train <- downloadcsv(training.url, c("", "NA", "#DIV/0!"))
+
+test <- downloadcsv(test.cases.url, c("", "NA", "#DIV/0!"))
+
+# The training data has 19622 observations and 160 features, and the distribution of the five measured stances A,B,C,D,E is:
+
+dim(train)
+table(train$classe)
+set.seed(123456)
+trainset <- createDataPartition(train$classe, p = 0.8, list = FALSE)
+Training <- train[trainset, ]
+Validation <- train[-trainset, ]
+
+# Check for near zero variance predictors and drop them if necessary
+nonzerocol <- nearZeroVar(Training)
+Training <- Training[, -nonzerocol]
+
+# exclude columns with 40%  more missing values exclude descriptive columns
+
+countlength <- sapply(Training, function(x) {
+  sum(!(is.na(x) | x == ""))
+})
+
+nullCol <- names(countlength[countlength < 0.6 * length(Training$classe)])
+
+descriptcol <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", 
+                 "cvtd_timestamp", "new_window", "num_window")
+
+excludecolumns <- c(descriptcol, nullCol)
+
+Training <- Training[, !names(Training) %in% excludecolumns]
+rfModel <- randomForest(as.factor(classe)~ ., data = Training, importance = TRUE, ntrees = 10)
+
+## Model Validation 
+
+ptraining <- predict(rfModel, Training)
+
+# Using 'union' to ensure same level
+u1 <- union(ptraining,Training$classe)
+t1 <- table(factor(ptraining, u1), factor(Training$classe, u1))
+print(confusionMatrix(t1))
+pvalidation <- predict(rfModel, Validation)
+
+# Using 'union' to ensure same level
+u2 <- union(pvalidation,Validation$classe)
+t2 <- table(factor(pvalidation, u2), factor(Validation$classe, u2))
+print(confusionMatrix(t2))
+ptest <- predict(rfModel, test)
+ptest
+```
